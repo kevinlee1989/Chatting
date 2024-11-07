@@ -106,7 +106,8 @@
 
     void reset() {
         // reaction count reset
-        for (uint32_t i = 0; i < current_chat_count; i++) {
+        uint32_t i =0;
+        for (i = 0; i < current_chat_count; i++) {
             chats[i].reaction_count = 0;  
         }
         
@@ -121,7 +122,8 @@
 
 
         // chatting data
-        for (uint32_t i = 0; i < current_chat_count; i++) {
+        uint32_t i =0;
+        for ( i = 0; i < current_chat_count; i++) {
             struct Chat* chat = &chats[i];
 
             // format 
@@ -129,7 +131,8 @@
             write(client, buffer, strlen(buffer));
 
             // reaction
-            for (uint32_t j = 0; j < chat->reaction_count; j++) {
+            uint32_t j =0;
+            for (j = 0; j < chat->reaction_count; j++) {
                 struct Reaction* reaction = &chat->reactions[j];
                 snprintf(buffer, sizeof(buffer), "                          (%s)  %s\n", reaction->username, reaction->message);
                 write(client, buffer, strlen(buffer));
@@ -163,13 +166,13 @@
     }
 
     void handle_reaction(char* path, int client) {
-        // 쿼리 파라미터 추출
+        // extract query param
         char* user_param = parse_user(path);
         char* message_param = parse_message(path);
         char* id_param = parse_id(path);
 
         if (!user_param || !message_param || !id_param) {
-            // 필수 파라미터가 없을 경우 에러 메시지 전송
+            // Error
             const char* error_msg = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nMissing user, message, or id parameter\n";
             write(client, error_msg, strlen(error_msg));
             
@@ -178,10 +181,10 @@
 
         // 반응 추가
         if (add_reaction(user_param, message_param, id_param)) {
-            // 성공적으로 반응이 추가된 경우 응답 전송
+            // if success
             respond_with_chats(client);
         } else {
-            // 실패 시 오류 메시지 전송
+            // Fail
             const char* error_msg = "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\n\r\nFailed to add reaction\n";
             write(client, error_msg, strlen(error_msg));
         }
@@ -272,17 +275,17 @@
     }
 
 int main(int argc, char* argv[]) {
-    int port = 8080;  // 기본 포트 번호 설정
+    int port = 8080;  // port num
 
-    // 명령줄 인수를 통해 포트 번호 설정
+    // setting up port num
     if (argc > 1) {
         port = atoi(argv[1]);
     }
 
-    // 서버 시작 메시지 출력
+    // message print
     printf("Starting chat server on port %d\n", port);
 
-    // 서버 시작
+    // server start
     start_server(handle_request, port);
 
     return 0;
