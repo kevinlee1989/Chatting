@@ -259,11 +259,11 @@
         // checking request HTTP type
         if (strncmp(request, "GET /chats ", 11) == 0) {
             respond_with_chats(client);
-        } else if (strncmp(request, "POST /post?", 11) == 0) {
+        } else if (strncmp(request, "/post?", 6) == 0) {
             handle_post(request, client);
-        } else if (strncmp(request, "POST /react?", 12) == 0) {
+        } else if (strncmp(request, "/react?", 7) == 0) {
             handle_reaction(request, client);
-        } else if (strncmp(request, "POST /reset", 11) == 0) {
+        } else if (strncmp(request, "/reset", 6) == 0) {
             reset();
             const char* response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nChat server has been reset.\n";
             write(client, response, strlen(response));
