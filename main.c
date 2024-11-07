@@ -9,7 +9,7 @@
 
     #define MAX_USERNAME_LENGTH 15
     #define MAX_MESSAGE_LENGTH 255
-    #define MAX_CHATS 100000
+    #define MAX_CHATS 1000
     #define MAX_TIME 50
     #define MAX_REACTIONS 100
 
