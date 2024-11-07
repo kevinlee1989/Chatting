@@ -30,7 +30,7 @@
 
     // Global variable
     struct Chat chats[MAX_CHATS];
-    uint32_t current_chat_count = 0;
+    static uint32_t current_chat_count = 0;
 
     uint8_t add_chat(char* username, char* message);
     uint8_t add_reaction(char* username, char* message, char* id_str);
