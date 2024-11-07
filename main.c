@@ -9,7 +9,7 @@
 
     #define MAX_USERNAME_LENGTH 15
     #define MAX_MESSAGE_LENGTH 255
-    #define MAX_CHATS 1000
+    #define MAX_CHATS 100000
     #define MAX_TIME 50
     #define MAX_REACTIONS 100
 
@@ -30,7 +30,7 @@
 
     // Global variable
     struct Chat chats[MAX_CHATS];
-    static uint32_t current_chat_count = 0;
+    uint32_t current_chat_count = 0;
 
     uint8_t add_chat(char* username, char* message);
     uint8_t add_reaction(char* username, char* message, char* id_str);
@@ -41,6 +41,7 @@
     char* parse_user(char* path);
     char* parse_message(char* path);
     char* parse_id(char* path);
+    void url_decode(char *src, char *dest);
 
 
     /****Data Handling Functions****/
@@ -150,6 +151,8 @@
         // extract query parameter from path
         char* user_param = parse_user(path);
         char* message_param = parse_message(path);
+	    url_decode(parse_user(path), user_param);
+    	url_decode(parse_message(path), message_param);
 
         if (!user_param || !message_param) {
             // if there is no user or message then output error
@@ -173,7 +176,9 @@
         char* user_param = parse_user(path);
         char* message_param = parse_message(path);
         char* id_param = parse_id(path);
-
+	    url_decode(parse_user(path), user_param);
+    	url_decode(parse_message(path), message_param);
+    	url_decode(parse_id(path), id_param);
         if (!user_param || !message_param || !id_param) {
             // Error
             const char* error_msg = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nMissing user, message, or id parameter\n";
@@ -265,18 +270,18 @@ void handle_request(char* request, int client) {
    char *line = strtok(request, "\r\n");
 
 
-    if (strstr(request, "/chats") != NULL) {
+    if (strstr(line, "/chats") != NULL) {
         respond_with_chats(client);
     }
     
-    else if (strstr(request, "/post?") != NULL) {
+    else if (strstr(line, "/post?") != NULL) {
         handle_post(line, client);
     }
     
-    else if (strstr(request, "/react?") != NULL) {
+    else if (strstr(line, "/react?") != NULL) {
         handle_reaction(line, client);
     }
-        else if (strstr(request, "/reset") != NULL) {
+        else if (strstr(line, "/reset") != NULL) {
         reset();
         const char* response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nChat server has been reset.\n";
         write(client, response, strlen(response));
@@ -287,6 +292,41 @@ void handle_request(char* request, int client) {
         write(client, error_msg, strlen(error_msg));
     }
 }
+
+uint8_t hex_to_byte(char hex) {
+    if ('0' <= hex && hex <= '9') return hex - '0';
+    if ('a' <= hex && hex <= 'f') return hex - 'a' + 10;
+    if ('A' <= hex && hex <= 'F') return hex - 'A' + 10;
+    return 0;
+}
+
+
+void url_decode(char *src, char *dest) {
+    char *p_src = src;
+    char *p_dest = dest;
+
+    while (*p_src != '\0') {
+        if (*p_src == '%') {
+            //
+            uint8_t high = hex_to_byte(*(p_src + 1));
+            uint8_t low = hex_to_byte(*(p_src + 2));
+            uint8_t final = (high << 4) | low;
+            *p_dest = (unsigned char) final;
+
+            // increment
+            p_src +=2;
+
+        }  else {
+            *p_dest = *p_src;
+
+        }
+        p_src++;
+        p_dest++;
+    }
+    *p_dest = '\0'; 
+}
+
+
 
 
 int main(int argc, char* argv[]) {
