@@ -9,7 +9,7 @@
 
     #define MAX_USERNAME_LENGTH 15
     #define MAX_MESSAGE_LENGTH 255
-    #define MAX_CHATS 100000
+    #define MAX_CHATS 1000
     #define MAX_TIME 50
     #define MAX_REACTIONS 100
 
@@ -30,7 +30,7 @@
 
     // Global variable
     struct Chat chats[MAX_CHATS];
-    uint32_t current_chat_count = 0;
+    static uint32_t current_chat_count = 0;
 
     uint8_t add_chat(char* username, char* message);
     uint8_t add_reaction(char* username, char* message, char* id_str);
@@ -151,17 +151,19 @@
         // extract query parameter from path
         char* user_param = parse_user(path);
         char* message_param = parse_message(path);
-	    url_decode(parse_user(path), user_param);
-    	url_decode(parse_message(path), message_param);
+	char decoded_user[MAX_USERNAME_LENGTH + 1];
+    	char decoded_message[MAX_MESSAGE_LENGTH + 1];
+	url_decode(parse_user(path), decoded_user);
+    	url_decode(parse_message(path), decoded_message);
 
-        if (!user_param || !message_param) {
+        if (!decoded_user[0] || !decoded_message[0]) {
             // if there is no user or message then output error
             const char* error_msg = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nMissing user or message parameter\n";
             write(client, error_msg, strlen(error_msg));
             return;
         }
 
-        if (add_chat(user_param, message_param)) {
+        if (add_chat(decoded_user, decoded_message)) {
             // if chat sending is succesful
             respond_with_chats(client);
         } else {
@@ -176,7 +178,7 @@
         char* user_param = parse_user(path);
         char* message_param = parse_message(path);
         char* id_param = parse_id(path);
-	    url_decode(parse_user(path), user_param);
+	url_decode(parse_user(path), user_param);
     	url_decode(parse_message(path), message_param);
     	url_decode(parse_id(path), id_param);
         if (!user_param || !message_param || !id_param) {
@@ -275,6 +277,13 @@ void handle_request(char* request, int client) {
     }
     
     else if (strstr(line, "/post?") != NULL) {
+        char *message_start = strstr(line, "message=");
+        if (message_start) {
+            message_start += strlen("message=");
+            char *end = strchr(message_start, ' ');
+            if (end) {
+                *end = '\0';             }
+        }
         handle_post(line, client);
     }
     
