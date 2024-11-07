@@ -65,7 +65,7 @@
         // showing current time
         time_t now = time(NULL);
         struct tm* current_time = localtime(&now);
-        strftime(new_chat-> time, MAX_TIME, "%Y year %m month %d day:  %H:%M", current_time);
+        strftime(new_chat-> time, MAX_TIME, "%Y-%m-%d %H:%M", current_time);
 
         current_chat_count += 1;
 
@@ -100,7 +100,7 @@
         // increase reaction count
         chat->reaction_count += 1;
 
-        //return 1;
+        return 1;
     }
 
 
@@ -118,7 +118,8 @@
     /****Request and Response Handling Functions****/
     void respond_with_chats(int client) {
         // temporary buffer for respond
-        char buffer[1024];  
+        char buffer[1024]; 
+        int fixed_spacing = 37;	
 
 
         // chatting data
@@ -126,16 +127,18 @@
         for ( i = 0; i < current_chat_count; i++) {
             struct Chat* chat = &chats[i];
 
+	    int spacing = fixed_spacing - (int)(strlen(chat->time) + 6 + strlen(chat->userName));
             // format 
-            snprintf(buffer, sizeof(buffer), "[#%d %s]    %s: %s\n", chat->id, chat->time, chat->userName, chat->message);
-            write(client, buffer, strlen(buffer));
+            snprintf(buffer, sizeof(buffer), "[#%d %s]%*s%s: %s\n",chat->id, chat->time, spacing, "", chat->userName, chat->message);
+	    write(client, buffer, strlen(buffer));
 
             // reaction
             uint32_t j =0;
             for (j = 0; j < chat->reaction_count; j++) {
                 struct Reaction* reaction = &chat->reactions[j];
-                snprintf(buffer, sizeof(buffer), "                          (%s)  %s\n", reaction->username, reaction->message);
-                write(client, buffer, strlen(buffer));
+		int padding = 34 - (int)strlen(reaction->username);  // Calculate remaining spaces to reach 10 characters
+            	snprintf(buffer, sizeof(buffer), "%*s(%s)  %s\n", padding, "", reaction->username, reaction->message);
+            	write(client, buffer, strlen(buffer));	
             }
         }
 
@@ -212,6 +215,8 @@
             i += 1;
         }
         user[i] = '\0';  // put null at the end of the array
+
+	return user;
     }
 
     char* parse_message(char* path) {
@@ -221,7 +226,7 @@
         if (message_start == NULL) {
             message[0] = '\0';
             return message;
-        }
+        }   
         message_start += strlen("message=");
 
         int i = 0;
@@ -255,27 +260,37 @@
     }
 
 
-    void handle_request(char* request, int client) {
-        // checking request HTTP type
-        if (strncmp(request, "GET /chats ", 11) == 0) {
-            respond_with_chats(client);
-        } else if (strncmp(request, "/post?", 6) == 0) {
-            handle_post(request, client);
-        } else if (strncmp(request, "/react?", 7) == 0) {
-            handle_reaction(request, client);
-        } else if (strncmp(request, "/reset", 6) == 0) {
-            reset();
-            const char* response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nChat server has been reset.\n";
-            write(client, response, strlen(response));
-        } else {
-            // Error message 
-            const char* error_msg = "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\n\r\nInvalid request\n";
-            write(client, error_msg, strlen(error_msg));
-        }
+void handle_request(char* request, int client) {
+   //extracting only first line to render the chat service
+   char *line = strtok(request, "\r\n");
+
+
+    if (strstr(request, "/chats") != NULL) {
+        respond_with_chats(client);
+    }
+    
+    else if (strstr(request, "/post?") != NULL) {
+        handle_post(line, client);
+    }
+    
+    else if (strstr(request, "/react?") != NULL) {
+        handle_reaction(line, client);
+    }
+        else if (strstr(request, "/reset") != NULL) {
+        reset();
+        const char* response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nChat server has been reset.\n";
+        write(client, response, strlen(response));
     }
 
+    else {
+        const char* error_msg = "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\n\r\nInvalid request\n";
+        write(client, error_msg, strlen(error_msg));
+    }
+}
+
+
 int main(int argc, char* argv[]) {
-    int port = 8080;  // port num
+    int port = 8080;  // if no port num then default port num will be 8080
 
     // setting up port num
     if (argc > 1) {
