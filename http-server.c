@@ -2,6 +2,7 @@
 #include "http-server.h"
 
 
+
 void start_server(void(*handler)(char*, int), int port) {
     int server_sock, client_sock;
     struct sockaddr_in server_addr, client_addr;
