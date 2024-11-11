@@ -189,7 +189,7 @@
             return;
         }
 
-        // 반응 추가
+        // add reactions
         if (add_reaction(user_param, message_param, id_param)) {
             // if success
             respond_with_chats(client);
@@ -213,7 +213,7 @@
             user[0] = '\0';  // if there is no user_start then return null
             return user;
         }
-        user_start += strlen("user=");  // "user=" 이후로 이동
+        user_start += strlen("user=");  // move the user_start after "user=" 
 
         // putting in to the user array
         int i = 0;
