@@ -1,16 +1,16 @@
-    #include <stdio.h>
-    #include <stdlib.h>
-    #include <string.h>
-    #include <stdint.h>
-    #include <time.h>
-    #include <assert.h>
-    #include <unistd.h>
-    #include "http-server.h"
+#include "http-server.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <time.h>
+#include <assert.h>
+#include <unistd.h>
 
     #define MAX_USERNAME_LENGTH 15
     #define MAX_MESSAGE_LENGTH 255
     #define MAX_CHATS 1000
-    #define MAX_TIME 50
+    #define MAX_TIME 20
     #define MAX_REACTIONS 100
 
     struct Reaction {
@@ -41,6 +41,7 @@
     char* parse_user(char* path);
     char* parse_message(char* path);
     char* parse_id(char* path);
+    void handle_request(char* request, int client);
     void url_decode(char *src, char *dest);
 
 
@@ -65,12 +66,12 @@
 
         // showing current time
         time_t now = time(NULL);
-        struct tm* current_time = localtime(&now);
-        strftime(new_chat-> time, MAX_TIME, "%Y-%m-%d %H:%M", current_time);
+        struct tm *current_time = localtime(&now);
+        strftime(new_chat-> time, MAX_TIME, "%Y-%m-%d %H:%M:%S", current_time);
 
         current_chat_count += 1;
 
-        return current_chat_count;
+        return 1;
     }
 
 
@@ -104,22 +105,29 @@
         return 1;
     }
 
+    void reset()   
+{
+    for (uint32_t i = 0; i < current_chat_count; i++) {
+        chats[i].id = 0;
+        chats[i].userName[0] = '\0';
+        chats[i].message[0] = '\0';
+        chats[i].time[0] = '\0';
+        chats[i].reaction_count = 0;
 
-    void reset() {
-        // reaction count reset
-        uint32_t i =0;
-        for (i = 0; i < current_chat_count; i++) {
-            chats[i].reaction_count = 0;  
+        for (uint32_t j = 0; j < MAX_REACTIONS; j++) {
+            chats[i].reactions[j].username[0] = '\0';
+            chats[i].reactions[j].message[0] = '\0';
         }
-        
-        // reseting all the chat count
-        current_chat_count = 0;
     }
+
+    current_chat_count = 0;
+}
+
 
     /****Request and Response Handling Functions****/
     void respond_with_chats(int client) {
         // temporary buffer for respond
-        char buffer[1024]; 
+        char buffer[2000]; 
         int fixed_spacing = 37;	
 
 
@@ -131,7 +139,7 @@
 	    int spacing = fixed_spacing - (int)(strlen(chat->time) + 6 + strlen(chat->userName));
             // format 
             snprintf(buffer, sizeof(buffer), "[#%d %s]%*s%s: %s\n",chat->id, chat->time, spacing, "", chat->userName, chat->message);
-	    write(client, buffer, strlen(buffer));
+	        write(client, buffer, strlen(buffer));
 
             // reaction
             uint32_t j =0;
@@ -163,8 +171,10 @@
             return;
         }
 
-        if (add_chat(decoded_user, decoded_message)) {
+        if (add_chat(decoded_user, decoded_message) == 1) {
             // if chat sending is succesful
+            const char* succss_msg = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n";
+            write(client, succss_msg, strlen(succss_msg));
             respond_with_chats(client);
         } else {
             // if chat sending is unsuccesful
@@ -181,7 +191,7 @@
 	url_decode(parse_user(path), user_param);
     	url_decode(parse_message(path), message_param);
     	url_decode(parse_id(path), id_param);
-        if (!user_param || !message_param || !id_param) {
+        if (!user_param || !message_param || !id_param || user_param == NULL || strlen(user_param) == 0 || message_param == NULL || strlen(message_param) == 0) {
             // Error
             const char* error_msg = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nMissing user, message, or id parameter\n";
             write(client, error_msg, strlen(error_msg));
@@ -189,9 +199,20 @@
             return;
         }
 
+	// if react message longer than 15
+	if(strlen(message_param) > 15){
+		const char* error_msg = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nReaction message exceed 15\n";
+            write(client, error_msg, strlen(error_msg));
+
+	    return;
+	}
+
         // add reactions
         if (add_reaction(user_param, message_param, id_param)) {
             // if success
+            const char* succss_msg = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n";
+            write(client, succss_msg, strlen(succss_msg));
+
             respond_with_chats(client);
         } else {
             // Fail
@@ -200,7 +221,56 @@
         }
     }
 
+// Resubmission edit funtion
+void handle_edit(char* path, int client) {
+    // Extract query parameters from path
+    char* id_param = parse_id(path);
+    char* message_param = parse_message(path);
+    url_decode(parse_id(path), id_param);
+    url_decode(parse_message(path), message_param);
 
+    // Check if `id` or `message` parameter is missing
+    if (id_param == NULL || strlen(id_param) == 0) {
+        const char* error_msg = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nMissing 'id' parameter in request\n";
+        write(client, error_msg, strlen(error_msg));
+        return;
+    }
+    if (message_param == NULL || strlen(message_param) == 0) {
+        const char* error_msg = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nMissing 'message' parameter in request\n";
+        write(client, error_msg, strlen(error_msg));
+        return;
+    }
+
+    // Validate `id` parameter
+    uint32_t id = atoi(id_param);
+    if (id == 0 || id > current_chat_count) {
+        const char* error_msg = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nInvalid 'id' parameter: no such chat exists\n";
+        write(client, error_msg, strlen(error_msg));
+        return;
+    }
+
+    // Validate `message` length
+    if (strlen(message_param) > MAX_MESSAGE_LENGTH) {
+        const char* error_msg = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n\r\nMessage length exceeds the limit of 255 characters\n";
+        write(client, error_msg, strlen(error_msg));
+        return;
+    }
+
+    // Locate the chat to edit
+    struct Chat* chat = &chats[id - 1];
+
+    // Update the message
+    strncpy(chat->message, message_param, MAX_MESSAGE_LENGTH);
+    chat->message[MAX_MESSAGE_LENGTH] = '\0'; // Ensure null-termination
+
+    // showing current time
+    time_t now = time(NULL);
+    struct tm *current_time = localtime(&now);
+    strftime(chat-> time, MAX_TIME, "%Y-%m-%d %H:%M:%S", current_time);
+
+    // Respond with updated list of chats
+    respond_with_chats(client);
+}
 
     /*****Parsing Functions****/
     char* parse_user(char* path) {
@@ -217,12 +287,16 @@
 
         // putting in to the user array
         int i = 0;
-        while (user_start[i] != '\0' && user_start[i] != '&' && i < MAX_USERNAME_LENGTH) {
+        while (user_start[i] != '\0' && user_start[i] != '&') {
             user[i] = user_start[i];
             i += 1;
         }
         user[i] = '\0';  // put null at the end of the array
 
+	if (i > MAX_USERNAME_LENGTH) {
+        	fprintf(stderr, "Error: User parameter exceeds maximum length.\n");
+        	user[0] = '\0'; // Return empty string in case of overflow
+    	}
 	return user;
     }
 
@@ -268,38 +342,39 @@
 
 
 void handle_request(char* request, int client) {
+    char path[256];
    //extracting only first line to render the chat service
-   char *line = strtok(request, "\r\n");
+   char *line = strstr(request, "\r\n");
+
+    char first_line[256];
+    size_t line_length = line - request;
+    strncpy(first_line, request, line_length);
+    first_line[line_length] = '\0';  // null-terminate
 
 
-    if (strstr(line, "/chats") != NULL) {
+    sscanf(first_line, "%*s %s", path);
+
+    if (strncmp(path, "/chats", 6) == 0) {
         respond_with_chats(client);
+    } 
+    else if (strncmp(path, "/post", 5) == 0) {
+        handle_post(path, client); 
+    } 
+    else if (strncmp(path, "/react", 6) == 0) {
+        handle_reaction(path, client);  
     }
-    
-    else if (strstr(line, "/post?") != NULL) {
-        char *message_start = strstr(line, "message=");
-        if (message_start) {
-            message_start += strlen("message=");
-            char *end = strchr(message_start, ' ');
-            if (end) {
-                *end = '\0';             }
-        }
-        handle_post(line, client);
-    }
-    
-    else if (strstr(line, "/react?") != NULL) {
-        handle_reaction(line, client);
-    }
-        else if (strstr(line, "/reset") != NULL) {
+    else if (strncmp(path, "/edit", 5) ==0){
+	handle_edit(path, client);
+    }	
+    else if (strncmp(path, "/reset", 6) == 0) {
         reset();
-        const char* response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nChat server has been reset.\n";
-        write(client, response, strlen(response));
-    }
-
+        
+    } 
     else {
-        const char* error_msg = "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\n\r\nInvalid request\n";
+        const char* error_msg = "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\n\r\nPath not found.\n";
         write(client, error_msg, strlen(error_msg));
     }
+
 }
 
 uint8_t hex_to_byte(char hex) {
@@ -339,18 +414,19 @@ void url_decode(char *src, char *dest) {
 
 
 int main(int argc, char* argv[]) {
-    int port = 8080;  // if no port num then default port num will be 8080
+    int port = 0;  // if no port num then default port num will be 8080
 
     // setting up port num
     if (argc > 1) {
         port = atoi(argv[1]);
     }
 
+    current_chat_count = 0;
     // message print
     printf("Starting chat server on port %d\n", port);
 
     // server start
-    start_server(handle_request, port);
+    start_server(&handle_request, port);
 
     return 0;
-}
+} 
