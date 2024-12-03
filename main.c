@@ -268,6 +268,8 @@ void handle_edit(char* path, int client) {
     struct tm *current_time = localtime(&now);
     strftime(chat-> time, MAX_TIME, "%Y-%m-%d %H:%M:%S", current_time);
 
+    const char* suc_msg = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n";
+    write(client, suc_msg, strlen(suc_msg));
     // Respond with updated list of chats
     respond_with_chats(client);
 }
